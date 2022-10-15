@@ -308,13 +308,34 @@ function get_all_typers_string()
     return type_string
 end
 
-function limit_string_len(s, size) --s is the string, chunkSize is an integer. Returns a list of strings.
+-- credit to aaronlink127
+local function split_string_chunks_respect_word(str, char_len)
     local t = {}
-    while #s > size do
-        t[#t + 1] = s:sub(1, size)
-        s = s:sub(size + 1)
+    local cur_str = ""
+    local i = 1
+    if string.contains(str, ' ') then 
+        local t = {}
+        while #str > char_len do
+            t[#t + 1] = str:sub(1, char_len)
+            str = str:sub(char_len + 1)
+        end
+        t[#t + 1] = str
+        return t
     end
-    t[#t + 1] = s
+
+    for ln in str:gmatch("([^%s]*)") do
+        if (#cur_str + #ln + 1) > char_len then
+            t[i] = cur_str
+            i += 1
+            cur_str = ""
+        else
+            cur_str ..= " "
+        end
+        cur_str ..= ln
+    end
+    if #cur_str ~= 0 then
+        t[i] = cur_str
+    end
     return t
 end
 
@@ -350,6 +371,7 @@ util.create_tick_handler(function()
             directx.draw_text(chat_box_x + (max_chat_box_x / 2), chat_box_y - 0.01, typers, 5, text_scale, typing_color, true)
         end
     end
+
     if #all_visible_chats > 0 then
         if os.time() - last_chat_time < display_time then
             directx.draw_rect(chat_box_x, chat_box_y, min_rect_width, chat_box_y_scale, bg_color)
@@ -365,6 +387,8 @@ util.create_tick_handler(function()
                 if guesstimate_width > min_rect_width then 
                     min_rect_width = guesstimate_width
                 end
+                local segments = {}
+                segments[1] = concat_text
                 if guesstimate_width > max_chat_box_x then
                     -- get a good estimate of how many characters we need to hit until the string goes over the limit 
                     local string_limit = 65
@@ -377,19 +401,27 @@ util.create_tick_handler(function()
                             break
                         end
                     end
-                    local segments = limit_string_len(concat_text, string_limit)
-                    concat_text = table.concat(segments, '\n')
+                    segments = split_string_chunks_respect_word(concat_text, string_limit)
                 end
-                local _, guesstimate_height = directx.get_text_size(concat_text, text_scale)
-                directx.draw_text(chat_box_x, chat_box_y + y_offset, concat_name, 3, text_scale, c.player_color)
-                if c.tag ~= "" then
-                    directx.draw_text(chat_box_x + name_measure_x, chat_box_y + y_offset + (tag_measure_y/10), concat_tag, 3, tag_scale, tag_color)
-                    directx.draw_text(chat_box_x + name_measure_x + tag_measure_x, chat_box_y + y_offset, concat_text, 3, text_scale, msg_text_color, true)
-                else 
-                    directx.draw_text(chat_box_x + name_measure_x, chat_box_y + y_offset, concat_text, 3, text_scale, msg_text_color, true)
+                    for i, line in pairs(segments) do
+                        local _, guesstimate_height = directx.get_text_size(line, text_scale)
+                        local x_offset = chat_box_x
+                        if i == 1 then
+                            directx.draw_text(x_offset, chat_box_y + y_offset, concat_name, 3, text_scale, c.player_color)
+                            x_offset = chat_box_x + name_measure_x
+                            if c.tag ~= "" then
+                                directx.draw_text(x_offset, chat_box_y + y_offset + (tag_measure_y/10), concat_tag, 3, tag_scale, tag_color)
+                                x_offset += name_measure_x
+                                directx.draw_text(chat_box_x + name_measure_x + tag_measure_x, chat_box_y + y_offset, line, 3, text_scale, msg_text_color, true)
+                            else 
+                                directx.draw_text(chat_box_x + name_measure_x, chat_box_y + y_offset, line, 3, text_scale, msg_text_color, true)
+                            end
+                        else
+                            directx.draw_text(x_offset, chat_box_y + y_offset, line, 3, text_scale, msg_text_color, true)
+                        end
+                        y_offset += guesstimate_height + 0.001
+                        chat_box_y_scale = y_offset
                 end
-                y_offset += guesstimate_height + 0.001
-                chat_box_y_scale = y_offset
             end
         end
     end
